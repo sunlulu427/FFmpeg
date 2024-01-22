@@ -6,6 +6,9 @@ set -e
 # https://stackoverflow.com/questions/52896607/why-do-i-get-error-invalid-instruction-mnemonic-when-compiling-ffmpeg-for-and
 # https://juejin.cn/post/7100938254974877726
 
+# fdk-aac: https://sourceforge.net/projects/opencore-amr/files/fdk-aac/
+
+
 # ndk 路径
 NDK_ROOT=/Users/sunlulu/Library/Android/sdk/ndk/r26b
 TOOLCHAIN_PREFIX=$NDK_ROOT/toolchains/llvm/prebuilt/darwin-x86_64

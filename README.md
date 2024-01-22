@@ -14,6 +14,10 @@ such as audio, video, subtitles and related metadata.
 * `libswresample` implements audio mixing and resampling routines.
 * `libswscale` implements color conversion and scaling routines.
 
+### third party
+
+- `fdk-aac`: audio encoder lib
+
 ## Tools
 
 * [ffmpeg](https://ffmpeg.org/ffmpeg.html) is a command line toolbox to
