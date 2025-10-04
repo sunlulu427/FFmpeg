@@ -30,6 +30,7 @@
 #include <limits.h>
 #include <signal.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "libavutil/avstring.h"
 #include "libavutil/channel_layout.h"
@@ -43,6 +44,7 @@
 #include "libavutil/samplefmt.h"
 #include "libavutil/time.h"
 #include "libavutil/bprint.h"
+#include "libavutil/mem.h"
 #include "libavformat/avformat.h"
 #include "libavdevice/avdevice.h"
 #include "libswscale/swscale.h"
@@ -354,6 +356,7 @@ static int filter_nbthreads = 0;
 static int enable_vulkan = 0;
 static char *vulkan_params = NULL;
 static const char *hwaccel = NULL;
+static int dump_sei;
 
 /* current context */
 static int is_full_screen;
@@ -1748,6 +1751,83 @@ display:
     }
 }
 
+static int is_printable_ascii(const uint8_t *buf, size_t size)
+{
+    for (size_t i = 0; i < size; i++) {
+        uint8_t c = buf[i];
+        if (c == '\r' || c == '\n' || c == '\t')
+            continue;
+        if (c < 0x20 || c > 0x7e)
+            return 0;
+    }
+    return 1;
+}
+
+static void dump_unregistered_sei(const AVFrameSideData *sd)
+{
+    const uint8_t *data = sd->data;
+    const size_t size = sd->size;
+    char uuid_buf[16 * 3 + 1] = {0};
+    size_t uuid_len = FFMIN(size, (size_t)16);
+    size_t pos = 0;
+
+    for (size_t i = 0; i < uuid_len; i++) {
+        if (pos + 3 >= sizeof(uuid_buf))
+            break;
+        pos += av_snprintf(uuid_buf + pos, sizeof(uuid_buf) - pos, "%02X", data[i]);
+        if (i % 4 == 3 && i + 1 < uuid_len)
+            pos += av_snprintf(uuid_buf + pos, sizeof(uuid_buf) - pos, "-");
+    }
+
+    av_log(NULL, AV_LOG_INFO,
+           "SEI unregistered uuid=%s payload=%zu bytes\n",
+           uuid_len ? uuid_buf : "<unknown>",
+           size > uuid_len ? size - uuid_len : 0);
+
+    if (size <= uuid_len)
+        return;
+
+    const uint8_t *payload = data + uuid_len;
+    size_t payload_size = size - uuid_len;
+
+    if (is_printable_ascii(payload, payload_size)) {
+        char *msg = av_malloc(payload_size + 1);
+        if (msg) {
+            memcpy(msg, payload, payload_size);
+            msg[payload_size] = 0;
+            av_log(NULL, AV_LOG_INFO, "SEI text: %s\n", msg);
+            av_free(msg);
+        }
+    } else {
+        av_hex_dump_log(NULL, AV_LOG_INFO, payload, payload_size);
+    }
+}
+
+static void dump_sei_side_data(const AVFrame *frame)
+{
+    if (!frame || frame->nb_side_data <= 0)
+        return;
+
+    for (int i = 0; i < frame->nb_side_data; i++) {
+        const AVFrameSideData *sd = frame->side_data[i];
+        if (!sd || !sd->data || !sd->size)
+            continue;
+
+        switch (sd->type) {
+        case AV_FRAME_DATA_SEI_UNREGISTERED:
+            dump_unregistered_sei(sd);
+            break;
+        case AV_FRAME_DATA_SEI_ITU_T_T35:
+            av_log(NULL, AV_LOG_INFO,
+                   "SEI ITU-T T35 payload=%d bytes\n", sd->size);
+            av_hex_dump_log(NULL, AV_LOG_INFO, sd->data, sd->size);
+            break;
+        default:
+            break;
+        }
+    }
+}
+
 static int queue_picture(VideoState *is, AVFrame *src_frame, double pts, double duration, int64_t pos, int serial)
 {
     Frame *vp;
@@ -1773,6 +1853,9 @@ static int queue_picture(VideoState *is, AVFrame *src_frame, double pts, double 
     vp->serial = serial;
 
     set_default_window_size(vp->width, vp->height, vp->sar);
+
+    if (dump_sei)
+        dump_sei_side_data(src_frame);
 
     av_frame_move_ref(vp->frame, src_frame);
     frame_queue_push(&is->pictq);
@@ -3691,6 +3774,7 @@ static const OptionDef options[] = {
     { "enable_vulkan",      OPT_TYPE_BOOL,            0, { &enable_vulkan }, "enable vulkan renderer" },
     { "vulkan_params",      OPT_TYPE_STRING, OPT_EXPERT, { &vulkan_params }, "vulkan configuration using a list of key=value pairs separated by ':'" },
     { "hwaccel",            OPT_TYPE_STRING, OPT_EXPERT, { &hwaccel }, "use HW accelerated decoding" },
+    { "dumpsei",            OPT_TYPE_BOOL,   OPT_EXPERT, { &dump_sei }, "print SEI side data for video frames", "" },
     { NULL, },
 };
 
