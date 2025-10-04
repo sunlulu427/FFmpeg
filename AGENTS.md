@@ -37,3 +37,9 @@ This guide captures the conventions used when extending FFmpeg in this repositor
 - Interactive runs require no arguments: use ↑/↓ and Enter to pick NDK, target ABI (`arm64`, `armv7a`, `x86`, `x86_64`, or `all`), library type (`shared`, `static`, `both`), API level (21–34 or custom), and output directory; confirmations reopen the wizard or cancel cleanly.
 - Non-interactive syntax: `./build_android.sh <arch> [output_dir] [api] [library_type]`; defaults are `arm64`, `./build/android-<arch>`, API 21, and `shared`. Set `ANDROID_NDK_ROOT` when skipping the interactive picker.
 - The script prepares LLVM toolchains under `toolchains/llvm/prebuilt/<host>`, configures FFmpeg with JNI/MediaCodec decoders, and toggles `--enable-{shared,static}` based on the selected library mode before building and installing artefacts per architecture.
+
+## iOS Cross-Build Script
+- `build_ios.sh` requires macOS with Xcode Command Line Tools; it validates `iphoneos` and `iphonesimulator` SDKs via `xcrun` before proceeding.
+- Interactive mode (no arguments) mirrors the Android UX: arrow keys select build presets (`device-arm64`, `sim-arm64`, `sim-x86_64`, or universal bundles), library type (`shared`, `static`, `both`), minimum iOS deployment target, and output directory with summary confirmation.
+- Non-interactive usage: `./build_ios.sh <preset> [output_dir] [min_ios] [library_type]`; defaults are `device-arm64`, `./build/ios-<preset>`, iOS 13.0, and `static`.
+- The script invokes `xcrun`-provided clang/ar tools per SDK, injects `-arch` and deployment flags, and optionally lips static libraries into `OUTPUT_DIR/universal` when multiple architectures are built.
